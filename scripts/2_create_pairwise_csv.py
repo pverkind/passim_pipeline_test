@@ -76,7 +76,17 @@ import pyspark.sql.functions as F
 
 
 def word_count(s1, s2):
-    """count the number of (space-delimited) words in an alignment."""
+    """count the number of exactly matched (space-delimited)
+    words in an alignment.
+    
+    Example:
+        > s1 = "that is a------ great-- example..."
+        > s2 = "this is an even greater example!--"
+        > word_count(s1, s2)
+        1
+
+    (NB: only the word "is" fulfills the criteria!)
+    """
     cnt = 0
     i = 0
     while i < len(s1):
@@ -112,7 +122,7 @@ def ch_count(s1, s2, exclude_spaces=True):
     return cnt
 
 
-def match_per(match, length):
+def match_pct(match, length):
     """calculate the percentage of matched characters
     by the length of the alignment
 
@@ -121,7 +131,7 @@ def match_per(match, length):
         > s2 = "this is an even greater example!--"
         > matches = 21
         > length = 34
-        > match_per(matches, length)
+        > match_pct(matches, length)
         61.76470588235294
     """
     
@@ -131,6 +141,13 @@ def match_per(match, length):
         return (match/length) * 100
 
 def create_bi_dir(uni_dir_path):
+    """Create a copy of each csv file, in the other direction:
+    b1/b1_b2.csv => b2/b2_b1.csv
+
+    Args:
+        uni_dir_path (str): path to the folder containing the
+            uni-directional csv files.
+    """
     headers = ["align_len", "b1", "b2", "bw1", "bw2", "ch_match", "e1", "e2", "ew1", "ew2", "gid1", "gid2",
                "id1", "id2", "len1", "len2", "matches", "matches_percent", "s1", "s2", "score", "seq1", "seq2",
                "series_b1", "series_b2", "tok1", "tok2", "uid1", "uid2", "w_match", "first1", "first2"]
@@ -204,47 +221,16 @@ def create_bi_dir(uni_dir_path):
                         })
 
 
-if __name__ == '__main__':
-    print(sys.argv)
-    if len(sys.argv) > 1 and sys.argv[1] in "--help":
-        print("""
-Generate pairwise csv files from passim's json or parquet output.
+def main(in_folder, out_folder, file_type, bi_dir):
+    """Generate csv files from passim output files
 
-Usage:
-    python3 -m 2_create_pairwise_csv <passim_output_alignment_folder> <pairwise_csv_folder> (--bidirectional)
-
-Parameters:
-
-    passim_output_alignment_folder: the align.json or align.parquet
-    folder in passim's output folder
-    
-    pairwise_csv_folder: the output folder for the generated csv files
-
-    --bidirectional: if this flag is added, each book folder will
-    contain a csv file for each other book with which it shares reuse.
-""", file=sys.stderr)
-        exit(-1)
-
-    try:
-        in_folder = sys.argv[1]
-    except:
-        print("Provide the path to the align.json or align.parquet folder")
-        in_folder = input("inside the passim output folder: ")
-
-    try:
-        out_folder = sys.argv[2]
-    except:
-        print("Provide the path to the folder where you want")
-        out_folder = input("to store the csv files: ")
-
-    try:
-        if "bidirectional" in sys.argv[-1]:
-            bi_dir = True
-        else:
-            bi_dir = None
-    except:
-        bi_dir = None
-
+    Args:
+        in_folder (str): path to the input folder
+            (align.json or align.parquet folder in the passim output folder)
+        out_folder (str): path to the output folder
+        file_type (str): "json" or "parquet"
+        bi_dir (bool): if True, duplicate pairwise files for bi-directional use.
+    """
     # start the spark session:
     spark = SparkSession.builder \
         .getOrCreate()
@@ -252,25 +238,11 @@ Parameters:
     # define column functions to be used by pySpark:
     word_match = F.udf(lambda s1, s2: word_count(s1, s2), IntegerType())
     ch_match = F.udf(lambda s1, s2: ch_count(s1, s2), IntegerType())
-    match_percent = F.udf(lambda match, align_len: match_per(match, align_len), FloatType())
+    match_percent = F.udf(lambda match, align_len: match_pct(match, align_len), FloatType())
     align_len = F.udf(lambda s: len(s), IntegerType())
     ch_match_percent_col = F \
         .when(F.col("align_len") == 0, 0.0) \
         .otherwise(match_percent('matches', 'align_len'))
-
-    # check whether the input format is JSON or parquet
-    # (NB: passim outputs are 
-    
-    if in_folder.strip("/").endswith(".json"):
-        file_type = "json"
-    elif in_folder.strip("/").endswith(".parquet"):
-        file_type = "parquet"
-    else:
-        file_type = ""
-        while file_type not in ["json", "parquet"]:
-            print("Did not recognise input format.")
-            file_type = input("Please provide input format: 'json' or 'parquet': ")
-    print("fType: ", file_type)
 
     # load the records:
     df = spark.read \
@@ -333,11 +305,77 @@ Parameters:
     # generate bi-directional data:
     if bi_dir:
         create_bi_dir(out_folder)
+
+
+if __name__ == '__main__':
+    print(sys.argv)
+    if len(sys.argv) > 1 and sys.argv[1] in "--help":
+        print("""
+Generate pairwise csv files from passim's json or parquet output.
+
+Usage:
+    python3 -m 2_create_pairwise_csv <passim_output_alignment_folder> <pairwise_csv_folder> (--bidirectional)
+
+Parameters:
+
+    passim_output_alignment_folder: the align.json or align.parquet
+    folder in passim's output folder
+    
+    pairwise_csv_folder: the output folder for the generated csv files
+
+    --bidirectional: if this flag is added, each book folder will
+    contain a csv file for each other book with which it shares reuse.
+
+    --unidirectional: if this flag is added, each book pair will
+    be documented by only one csv file (b1_b2.csv OR b2_b1.csv, not both).
+""", file=sys.stderr)
+        exit(-1)
+
+    # get the input folder from the command line arguments or user input:
+    try:
+        in_folder = sys.argv[1]
+    except:
+        print("Provide the path to the align.json or align.parquet folder")
+        in_folder = input("inside the passim output folder: ")
+
+    # check whether the input format is json or parquet    
+    if in_folder.strip("/").endswith(".json"):
+        file_type = "json"
+    elif in_folder.strip("/").endswith(".parquet"):
+        file_type = "parquet"
     else:
+        file_type = ""
+        while file_type not in ["json", "parquet"]:
+            print("Did not recognise input format.")
+            file_type = input("Please provide input format: 'json' or 'parquet': ")
+    print("fType: ", file_type)
+
+    # get the output folder from the command line arguments or user input:
+    try:
+        out_folder = sys.argv[2]
+    except:
+        print("Provide the path to the folder where you want")
+        out_folder = input("to store the csv files: ")
+
+    # Check whether the output should be generated in bi-directional
+    # or uni-directional format:
+    bi_dir = None
+    if len(sys.argv) > 1:
+        if "bidirectional" in sys.argv[-1]:
+            bi_dir = True
+        elif "unidirectional" in sys.argv[-1]:
+            bi_dir = False
+    if bi_dir is None:
         print("Do you want to create copies of the uni-directional csv files")
-        bi_dir = input("so that each folder contains a csv for all related books? Y/n: ")
-        if bi_dir.strip().upper() == "Y":
-            create_bi_dir(out_folder)
+        r = input("so that each folder contains a csv for all related books? Y/n: ")
+        if r.strip().upper() == "Y":
+            bi_dir = True
+
+    main(in_folder, out_folder, file_type, bi_dir)
+    
+
+    
+
             
     
     
