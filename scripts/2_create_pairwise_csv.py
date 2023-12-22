@@ -5,6 +5,8 @@ adds a number of alignment-level statistics,
 groups them by book pairs,
 and stores them in pairwise csv files.
 
+Usage: `python3 -m 2_create_pairwise_csv.py <passim_output_folder> <pairwise_csv_folder> --bidirectional`
+
 The output files will have the same structure
 as the passim outputs with five additional columns:
     ch_match: the number of aligned characters
@@ -15,7 +17,48 @@ as the passim outputs with five additional columns:
       char match, and 'align_len' column, which we produce above,
     w_match: word match
 
-Usage: `python3 -m 2_create_pairwise_csv.py <passim_output_folder> <pairwise_csv_folder>`
+
+NB: to save computational resources, we generate text reuse data uni-directionally:
+a pair of documents is compared only once (document1 to document2, not document2 to document1).
+This is achieved by passing the following parameter to passim: 
+`--filterpairs 'gid < gid2'` (in which gid is a unique numeric ID for the first document in a pair,
+and gid2 a unique numeric ID for the second document in a pair): 
+documents from a book should be compared only to documents from books with a higher number.
+
+Imagine that we had three texts, with text reuse detected between all three of them,
+the script would generate this folder structure:
+
+```
+book1
+    |- book1_book2.csv
+    |- book1_book3.csv
+book2
+    |-book2_book3.csv
+```
+
+In order to make it easier to work with the pairwise csv files, we can create a copy of
+each of these pairwise book files (`<book1ID>_<book2ID>.csv`) in the other direction
+(`<book2ID>_<book1ID>.csv`).
+The result will be that for each book for which passim found text reuse,
+there will be a folder that contains a csv file for each book passim found text reuse with: 
+
+```
+book1
+    |- book1_book2.csv
+    |- book1_book3.csv
+book2
+    |- book2_book1.csv
+    |- book2_book3.csv
+book3
+    |- book3_book1.csv
+    |- book3_book2.csv
+```
+
+To get this "bi-directional" folder structure, either add the flag "--bidirectional"
+when running the script; or reply "Y" when prompted by the script.
+If, for reasons of size, you prefer the uni-directional structure, reply "N".
+
+
 
 """
 
@@ -163,8 +206,23 @@ def create_bi_dir(uni_dir_path):
 
 if __name__ == '__main__':
     print(sys.argv)
-    if len(sys.argv) not in [1, 3]:
-        print("Usage: python3 -m 2_create_pairwise_csv.py <passim_output_folder> <pairwise_csv_folder>", file=sys.stderr)
+    if len(sys.argv) > 1 and sys.argv[1] in "--help":
+        print("""
+Generate pairwise csv files from passim's json or parquet output.
+
+Usage:
+    python3 -m 2_create_pairwise_csv <passim_output_alignment_folder> <pairwise_csv_folder> (--bidirectional)
+
+Parameters:
+
+    passim_output_alignment_folder: the align.json or align.parquet
+    folder in passim's output folder
+    
+    pairwise_csv_folder: the output folder for the generated csv files
+
+    --bidirectional: if this flag is added, each book folder will
+    contain a csv file for each other book with which it shares reuse.
+""", file=sys.stderr)
         exit(-1)
 
     try:
@@ -177,7 +235,15 @@ if __name__ == '__main__':
         out_folder = sys.argv[2]
     except:
         print("Provide the path to the folder where you want")
-        out_folder = input("to store the csv files: ")    
+        out_folder = input("to store the csv files: ")
+
+    try:
+        if "bidirectional" in sys.argv[-1]:
+            bi_dir = True
+        else:
+            bi_dir = None
+    except:
+        bi_dir = None
 
     # start the spark session:
     spark = SparkSession.builder \
@@ -264,9 +330,14 @@ if __name__ == '__main__':
         elif '/series1=' in root:
             os.rename(root, re.sub('series1=', '', root))
 
-    print("Do you want to create copies of the uni-directional csv files")
-    bi_dir = input("so that each folder contains a csv for all related books? Y/n: ")
-    if bi_dir.strip().upper() == "Y":
+    # generate bi-directional data:
+    if bi_dir:
         create_bi_dir(out_folder)
+    else:
+        print("Do you want to create copies of the uni-directional csv files")
+        bi_dir = input("so that each folder contains a csv for all related books? Y/n: ")
+        if bi_dir.strip().upper() == "Y":
+            create_bi_dir(out_folder)
+            
     
     
