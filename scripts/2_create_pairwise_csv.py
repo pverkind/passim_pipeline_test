@@ -21,6 +21,7 @@ Usage: `python3 -m 2_create_pairwise_csv.py <passim_output_folder> <pairwise_csv
 
 from __future__ import print_function
 
+import csv
 import os
 import re
 import shutil
