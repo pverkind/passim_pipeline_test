@@ -15,7 +15,7 @@ as the passim outputs with five additional columns:
       char match, and 'align_len' column, which we produce above,
     w_match: word match
 
-Usage: `1_align_stats_CM-WM.py <passim_output_folder> <pairwise_csv_folder>`
+Usage: `python3 -m 2_create_pairwise_csv.py <passim_output_folder> <pairwise_csv_folder>`
 
 """
 
@@ -89,9 +89,21 @@ def match_per(match, length):
 
 if __name__ == '__main__':
     print(sys.argv)
-    if len(sys.argv) != 2:
-        print("Usage: 1_align-stats_CM-WM.py <input> <output>", file=sys.stderr)
+    if len(sys.argv) not in [1, 3]:
+        print("Usage: python3 -m 2_create_pairwise_csv.py <passim_output_folder> <pairwise_csv_folder>", file=sys.stderr)
         exit(-1)
+
+    try:
+        in_folder = sys.argv[1]
+    except:
+        print("Provide the path to the align.json or align.parquet folder")
+        in_folder = input("inside the passim output folder: ")
+
+    try:
+        out_folder = sys.argv[2]
+    except:
+        print("Provide the path to the folder where you want")
+        out_folder = input("to store the csv files: ")    
 
     # start the spark session:
     spark = SparkSession.builder \
@@ -108,7 +120,7 @@ if __name__ == '__main__':
 
     # check whether the input format is JSON or parquet
     # (NB: passim outputs are 
-    in_folder = sys.argv[1]
+    
     if in_folder.strip("/").endswith(".json"):
         file_type = "json"
     elif in_folder.strip("/").endswith(".parquet"):
@@ -116,8 +128,8 @@ if __name__ == '__main__':
     else:
         file_type = ""
         while file_type not in ["json", "parquet"]:
-            print("Did not recognise input format."):
-            file_type = "Please provide input format: 'json' or 'parquet': ")
+            print("Did not recognise input format.")
+            file_type = input("Please provide input format: 'json' or 'parquet': ")
     print("fType: ", file_type)
 
     # load the records:
@@ -148,12 +160,12 @@ if __name__ == '__main__':
         .format('csv') \
         .options(header='true', delimiter='\t') \
         .mode('overwrite') \
-        .save(sys.argv[2])
+        .save(out_folder)
     spark.stop()
 
     # rename the files output by spark to "<book1>_<book2>.csv"
     # and clean up the spark output:
-    for root, dirs, files in os.walk(sys.argv[2], topdown=False):
+    for root, dirs, files in os.walk(out_folder, topdown=False):
         if '/series2=' in root:
             data_files = list(filter(lambda s: not s.startswith('.'), files))
             dot_files = list(filter(lambda s: s.startswith('.'), files))
@@ -165,12 +177,10 @@ if __name__ == '__main__':
                 b1 = tmp2[0]
                 b2 = tmp2[1]
                 # generate new filename and join it to the root path
-                # new_f_name = b1 + "_" + b2 + '.csv.gz'
                 new_f_name = b1 + "_" + b2 + '.csv'
                 new_f_path = os.path.join(root, new_f_name)
                 # get the parent path of the root
                 parent = os.path.abspath(os.path.join(root, os.pardir))
-                # os.rename(os.path.join(root, rfiles[0]), re.sub('series2=', '', root) + '.json.gz')
                 # rename the path of the file (root + old filename) to the path of parent dir (of root) + new filename.
                 # E.g., changes /home/data/series1=JK001/series2=JK002/part.json.gz" to
                 # "/home/data/series1=JK001/JK001_JK002.json.gz"
