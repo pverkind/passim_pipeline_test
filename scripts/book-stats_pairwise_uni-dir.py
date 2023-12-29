@@ -224,7 +224,7 @@ def main(meta_fp, reuse_output_folder, reuse_input_folder, outfp):
 
     # read passim inputs files
     reuse_input_files = spark.read \
-        .format('json') \ 
+        .format('json') \
         .options(encoding='UTF-8') \
         .load(reuse_input_folder)
 
