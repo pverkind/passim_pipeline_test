@@ -1,12 +1,44 @@
-"""Generate text reuse statistics on the book level.
+"""Generate pairwise text reuse statistics on the book level.
 
-Usage: python3 -m book-stats_pairwise_uni-dir <passim_input> <passim_output> <meta> <output_file>
+
+Usage: python3 -m book-stats_pairwise_uni-dir <passim_input> <passim_output> <meta> <output_folder>
 
 Arguments:
     passim_input: path to the folder containing the input documents passed to passim
     passim_output: path to the folder containing the alignments output by passim (align.json / align.parquet)
     meta: path to the metadata file
-    output_file: path to the output CSV file
+    output_folder: path to the folder where the output CSV files should be stored
+
+The script produces one or more csv files (part-....csv) in the output folder.
+
+Output csv columns:
+    _T1: short version ID of T1 (without language component and extension)
+    _T2: short version ID of T2 (without language component and extension)
+    instances: number of text reuse alignments between this pair of texts
+    WM2_Total: total number of words in T2 that are fully matched in any alignment with T1
+    WM1_Total: total number of words in T1 that are fully matched in any alignment with T2
+    CM2_Total: total number of characters in T2 that are matched in any alignment with T1
+    CM1_Total: total number of characters in T1 that are matched in any alignment with T2
+    ch_MATCHES_Min: minimum number of matching characters in alignments between T1 and T2
+    ch_MATCHES_Max: maximum number of matching characters in alignments between T1 and T2
+    ch_MATCHES_Mean: mean number of matching characters in alignments between T1 and T2
+    date_B1: death date (hijri era) of the author of T1
+    date_B2: death date (hijri era) of the author of T2
+    author_B1: Latin-script names of the author of T1 (separated by " :: ")
+    author_B2: Latin-script names of the author of T2 (separated by " :: ")
+    book1: book URI of T1 (<date><author>.<title>)
+    book2: book URI of T2 (<date><author>.<title>)
+    tok_length_B1: number of Arabic-script tokens in T1
+    tok_length_B2: number of Arabic-script tokens in T2
+    ch_length_B1: number of Arabic-script characters in T1
+    ch_length_B2: number of Arabic-script characters in T2
+    WM_B2inB1: percentage of words in T2 that are fully matched in T1 (= WM2_Total / tok_length_B2)
+    WM_B1inB2: percentage of words in T1 that are fully matched in T2 (= WM1_Total / tok_length_B1)
+    CM_B2inB1: percentage of Arabic-script characters in T2 that are matched in T1 (= CM2_Total / ch_length_B2)
+    CM_B1inB2: percentage of Arabic-script characters in T1 that are matched in T2 (= CM1_Total / ch_length_B1)
+    chrono_B1B2: chronological order of the alignment of the pair (values: chron, anachron, sr_include (sr=self-reuse), sr_exclude, include, exclude)
+    chrono_B2B1: chronological order of the alignment of the pair (values: chron, anachron, sr_include (sr=self-reuse), sr_exclude, include, exclude)
+
 """
 
 from __future__ import print_function
@@ -280,7 +312,6 @@ def main(meta_fp, reuse_output_folder, reuse_input_folder, outfp):
         file_type = "parquet"
     elif reuse_output_folder.strip("/").endswith(".csv"):
         file_type = "csv"
-    #print(file_type)
    
     # load the passim output data into spark:
     reuse_outputs_df = spark.read \
@@ -300,7 +331,7 @@ def main(meta_fp, reuse_output_folder, reuse_input_folder, outfp):
     df1 = reuse_outputs_df \
         .withColumn('_T1', shortID('series1')) \
         .withColumn('_T2', shortID('series2'))
-    
+
     # Add metadata columns for book1 and book2,
     # add the character lenght of the entire milestone,
     # and aggregate statistics for all alignments between two books:
@@ -413,7 +444,7 @@ def main(meta_fp, reuse_output_folder, reuse_input_folder, outfp):
 
 if __name__ == '__main__':
     if len(sys.argv) != 5:
-        print("Usage: book-stats_pairwise_uni-dir.py <passim_input> <passim_output> <meta> <output_file>", file=sys.stderr)
+        print("Usage: python3 -m book-stats_pairwise_uni-dir <passim_input_folder> <passim_output_folder> <meta_file> <output_folder>", file=sys.stderr)
         exit(-1)
 
     reuse_input_folder = sys.argv[1]
