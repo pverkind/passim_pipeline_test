@@ -23,7 +23,7 @@ import csv
 import re
 
 if __name__ == '__main__':
-    uni_dir_path = input("Enter the path to the uni-dirctional csv data: ")
+    uni_dir_path = input("Enter the path to the uni-directional csv data: ")
 
     headers = ["align_len", "b1", "b2", "bw1", "bw2", "ch_match", "e1", "e2", "ew1", "ew2", "gid1", "gid2",
                "id1", "id2", "len1", "len2", "matches", "matches_percent", "s1", "s2", "score", "seq1", "seq2",
